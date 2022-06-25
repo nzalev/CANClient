@@ -1,3 +1,4 @@
+from time import sleep
 import requests
 import threading
 from queue import Empty, Queue
@@ -20,10 +21,15 @@ class Sender(threading.Thread):
             'apikey': config.api_key
         }
 
+        self._killed = False
+
 
     def add(self, frame) -> None:
         # Add Full exception check
         self.queue.put(frame)
+
+    def kill(self) -> None:
+        self._killed = True
 
 
     # Fill the frame buffer with up to n frames from the queue
@@ -49,13 +55,13 @@ class Sender(threading.Thread):
             return counter
 
 
-    def send(self, frames: list) -> None:
+    def _send(self) -> None:
         # begin timer
 
         try:
             res = requests.post(url=self.url,
                         headers=self.headers,
-                        json=frames)
+                        json=self.frame_buffer)
             # check res.status for 413
         except Exception as e:
             print(e)
@@ -64,9 +70,18 @@ class Sender(threading.Thread):
         # return elapsed time
 
 
+    # main loop
     def run(self) -> None:
-        pass
+        while not self._killed:
+            # Fill the frame buffer
+            n = self._get_n(self.frame_count_limit)
 
-        # while True:
-            # main worker loop
-            # backoff-timer
+            print('sending: ', n)
+            print('remaining: ', self.queue.qsize())
+
+            if (n > 0):
+                self._send()
+                self.frame_buffer = []
+
+            # back-off delay
+            sleep(5)
