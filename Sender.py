@@ -100,7 +100,7 @@ class Sender(threading.Thread):
         if (elapsed < self.target_req_time):
             self.frame_batch_size += 500
         else:
-            self.frame_batch_size /= 2
+            self.frame_batch_size = max(self.frame_batch_size / 2, 1)
 
 
     def run(self) -> None:
