@@ -12,8 +12,11 @@ class Sender(threading.Thread):
         super(Sender, self).__init__()
 
         self.queue = queue
-        self.frame_count_limit = 1000
         self.frame_buffer = []
+        self.frame_count_limit = 1000
+        self.backoff_timer = 0.5
+        self.bmin = config.backoff_timer_min
+        self.bmax = config.backoff_timer_max
 
         self.url = config.url + '/frames/bulk'
         self.headers = {
@@ -70,15 +73,31 @@ class Sender(threading.Thread):
         # return elapsed time
 
 
+    def _update_backoff_timer(self):
+        limit = self.frame_count_limit
+        queued = self.queue.qsize()
+
+        # if we are queueing frames too slowly, add delay
+        # if we have more frames than the limit, reduce delay
+        if (queued < limit):
+            self.backoff_timer = min(self.backoff_timer + 0.5, self.bmax)
+        elif (queued > limit):
+            self.backoff_timer = max(self.backoff_timer - 0.5, self.bmin)
+
+
+
     def run(self) -> None:
         while not self._killed:
+            self._update_backoff_timer()
             n = self._get_n(self.frame_count_limit)
-
+            remaining = self.queue.qsize()
             print('sending: ', n)
-            print('remaining: ', self.queue.qsize())
+            print('remaining: ', remaining)
+            print('backoff: ', self.backoff_timer)
+            print('')
 
             if (n > 0):
                 self._send()
                 self.frame_buffer = []
 
-            sleep(2)
+            sleep(self.backoff_timer)
