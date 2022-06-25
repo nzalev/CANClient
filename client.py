@@ -1,18 +1,19 @@
 import requests
 import can
 import sys
+from config import Config
 
-url = 'https://canapi.zalev.ca/frames/bulk'
-api_key = 'YdCsCdCh5eFE9Aq4gopdo'
+config = Config()
+
+
+interface = config.interface
+vehicle_id = config.vehicle_id
+frame_limit_count = 1000
+url = config.url + '/frames/bulk'
 headers = {
     'Content-type': 'application/json',
-    'apikey': api_key
+    'apikey': config.api_key
 }
-
-interface = 'vcan0'
-vehicle_id = ''
-frame_limit_count = 1000
-
 
 counter = 0
 frames = []
@@ -52,3 +53,7 @@ for msg in bus:
         data['data_string'])
     print(x)
 
+
+# create sender class (thread it)
+# use queue to store frames
+# use threading.Queue
