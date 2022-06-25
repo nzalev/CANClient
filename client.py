@@ -21,7 +21,6 @@ try:
             'data_len': len(msg.data),
             'data_string': ' '.join('{:02X}'.format(x) for x in msg.data)
         }
-
         sender.add(frame)
 
 except KeyboardInterrupt:

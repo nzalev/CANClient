@@ -60,8 +60,8 @@ class Sender(threading.Thread):
 
         try:
             res = requests.post(url=self.url,
-                        headers=self.headers,
-                        json=self.frame_buffer)
+                                headers=self.headers,
+                                json=self.frame_buffer)
             # check res.status for 413
         except Exception as e:
             print(e)
@@ -70,10 +70,8 @@ class Sender(threading.Thread):
         # return elapsed time
 
 
-    # main loop
     def run(self) -> None:
         while not self._killed:
-            # Fill the frame buffer
             n = self._get_n(self.frame_count_limit)
 
             print('sending: ', n)
@@ -83,5 +81,4 @@ class Sender(threading.Thread):
                 self._send()
                 self.frame_buffer = []
 
-            # back-off delay
-            sleep(5)
+            sleep(2)
