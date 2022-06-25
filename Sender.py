@@ -1,4 +1,4 @@
-from time import sleep
+import time
 import requests
 import threading
 from queue import Empty, Queue
@@ -13,10 +13,11 @@ class Sender(threading.Thread):
 
         self.queue = queue
         self.frame_buffer = []
-        self.frame_count_limit = 1000
+        self.frame_batch_size = 1000
         self.backoff_timer = 0.5
         self.bmin = config.backoff_timer_min
         self.bmax = config.backoff_timer_max
+        self.target_req_time = config.target_req_time
 
         self.url = config.url + '/frames/bulk'
         self.headers = {
@@ -42,10 +43,10 @@ class Sender(threading.Thread):
 
         try:
             size_now = self.queue.qsize()
-            if (size_now < self.frame_count_limit):
+            if (size_now < self.frame_batch_size):
                 n = size_now
             else:
-                n = self.frame_count_limit
+                n = self.frame_batch_size
 
             while (counter < n):
                 self.frame_buffer.append(self.queue.get(block=False))
@@ -58,8 +59,8 @@ class Sender(threading.Thread):
             return counter
 
 
-    def _send(self) -> None:
-        # begin timer
+    def _send(self) -> float:
+        begin = time.time()
 
         try:
             res = requests.post(url=self.url,
@@ -69,12 +70,13 @@ class Sender(threading.Thread):
         except Exception as e:
             print(e)
 
-        # end timer
-        # return elapsed time
+        end = time.time()
+        
+        return (end - begin)
 
 
-    def _update_backoff_timer(self):
-        limit = self.frame_count_limit
+    def _update_backoff_timer(self) -> None:
+        limit = self.frame_batch_size
         queued = self.queue.qsize()
 
         # if we are queueing frames too slowly, add delay
@@ -82,22 +84,43 @@ class Sender(threading.Thread):
         if (queued < limit):
             self.backoff_timer = min(self.backoff_timer + 0.5, self.bmax)
         elif (queued > limit):
-            self.backoff_timer = max(self.backoff_timer - 0.5, self.bmin)
+            self.backoff_timer = max(self.backoff_timer / 2, self.bmin)
 
+
+    # Keep HTTP requests reasonably fast by adjusting batch size
+    def _update_batch_size(self, elapsed) -> None:
+        
+        # If req time is in goldilocks region, don't update
+        if (elapsed > self.target_req_time - 0.1 and
+            elapsed < self.target_req_time + 0.1):
+            return
+
+        if (elapsed < self.target_req_time):
+            self.frame_batch_size += 500
+        else:
+            self.frame_batch_size /= 2
 
 
     def run(self) -> None:
         while not self._killed:
             self._update_backoff_timer()
-            n = self._get_n(self.frame_count_limit)
-            remaining = self.queue.qsize()
-            print('sending: ', n)
-            print('remaining: ', remaining)
             print('backoff: ', self.backoff_timer)
-            print('')
+
+
+            n = self._get_n(self.frame_batch_size)
+            remaining = self.queue.qsize()
 
             if (n > 0):
-                self._send()
+                print('frame lim: ', self.frame_batch_size)
+
+                elapsed = self._send()
+                self._update_batch_size(elapsed)
+
                 self.frame_buffer = []
 
-            sleep(self.backoff_timer)
+                print('sending: ', n)
+                print('remaining: ', remaining)
+                print('req speed: ', elapsed)
+                print('')
+
+            time.sleep(self.backoff_timer)
