@@ -27,6 +27,9 @@ class Sender(threading.Thread):
 
         self._killed = False
 
+        self.https_session = requests.Session()
+        self.https_session.headers.update(self.headers)
+
 
     def add(self, frame) -> None:
         # Add Full exception check
@@ -63,9 +66,8 @@ class Sender(threading.Thread):
         begin = time.time()
 
         try:
-            res = requests.post(url=self.url,
-                                headers=self.headers,
-                                json=self.frame_buffer)
+            res = self.https_session.post(url=self.url,
+                                          json=self.frame_buffer)
             # check res.status for 413
         except Exception as e:
             print(e)
