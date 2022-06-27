@@ -73,7 +73,7 @@ class Sender(threading.Thread):
             print(e)
 
         end = time.time()
-        
+
         return (end - begin)
 
 
@@ -91,14 +91,17 @@ class Sender(threading.Thread):
 
     # Keep HTTP requests reasonably fast by adjusting batch size
     def _update_batch_size(self, elapsed) -> None:
-        
+
         # If req time is in goldilocks region, don't update
         if (elapsed > self.target_req_time - 0.1 and
             elapsed < self.target_req_time + 0.1):
             return
 
         if (elapsed < self.target_req_time):
-            self.frame_batch_size += 500
+            if (self.frame_batch_size < 500):
+                self.frame_batch_size += 100
+            else:
+                self.frame_batch_size += 500
         else:
             self.frame_batch_size = max(self.frame_batch_size / 2, 1)
 
