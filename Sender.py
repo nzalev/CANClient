@@ -63,18 +63,18 @@ class Sender(threading.Thread):
 
 
     def _send(self) -> float:
-        begin = time.time()
-
         try:
             res = self.https_session.post(url=self.url,
                                           json=self.frame_buffer)
-            # check res.status for 413
+
+            # check for specific status codes
+            if (res.status_code != 200):
+                print('Req failed. Status: ', res.status_code)
+
         except Exception as e:
             print(e)
 
-        end = time.time()
-
-        return (end - begin)
+        return res.elapsed.total_seconds()
 
 
     def _update_backoff_timer(self) -> None:
@@ -116,7 +116,7 @@ class Sender(threading.Thread):
             remaining = self.queue.qsize()
 
             if (n > 0):
-                print('frame lim: ', self.frame_batch_size)
+                print('batch lim: ', self.frame_batch_size)
 
                 elapsed = self._send()
                 self._update_batch_size(elapsed)
