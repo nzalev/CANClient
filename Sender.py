@@ -63,6 +63,8 @@ class Sender(threading.Thread):
 
 
     def _send(self) -> float:
+        additional_time = 0
+
         try:
             res = self.https_session.post(url=self.url,
                                           json=self.frame_buffer)
@@ -71,10 +73,22 @@ class Sender(threading.Thread):
             if (res.status_code != 200):
                 print('Req failed. Status: ', res.status_code)
 
+                # If Req too large, send the buffer in two halfs
+                if (res.status_code == 413):
+                    mid = int(len(self.frame_buffer) / 2)
+                    first_half = self.frame_buffer[ : mid]
+                    second_half = self.frame_buffer[mid : ]
+
+                    self.frame_buffer = first_half
+                    additional_time += self._send()
+
+                    self.frame_buffer = second_half
+                    additional_time += self._send()
+
         except Exception as e:
             print(e)
 
-        return res.elapsed.total_seconds()
+        return (res.elapsed.total_seconds() + additional_time)
 
 
     def _update_backoff_timer(self) -> None:
