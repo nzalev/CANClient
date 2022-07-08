@@ -18,6 +18,7 @@ class Sender(threading.Thread):
         self.bmin = config.backoff_timer_min
         self.bmax = config.backoff_timer_max
         self.target_req_time = config.target_req_time
+        self.request_timeout = self.target_req_time + 10
 
         self.url = config.url + '/frames/bulk'
         self.headers = {
@@ -29,6 +30,8 @@ class Sender(threading.Thread):
 
         self.https_session = requests.Session()
         self.https_session.headers.update(self.headers)
+
+        self._retry = False
 
 
     def add(self, frame) -> None:
@@ -67,13 +70,26 @@ class Sender(threading.Thread):
 
         try:
             res = self.https_session.post(url=self.url,
-                                          json=self.frame_buffer)
+                                          json=self.frame_buffer,
+                                          timeout=self.request_timeout)
+            
+            if (not res):
+                self._retry = True
+                additional_time += self.request_timeout
+            else:
+                additional_time += res.elapsed.total_seconds()
+
 
             # check for specific status codes
             if (res.status_code != 200):
                 print('Req failed. Status: ', res.status_code)
 
                 # If Req too large, send the buffer in two halfs
+                # ---
+                # At present, frames will be lost if a retry occurs
+                # on the first send
+                # Can be fixed by combining the frame buffers again
+                # and quitting
                 if (res.status_code == 413):
                     mid = int(len(self.frame_buffer) / 2)
                     first_half = self.frame_buffer[ : mid]
@@ -84,14 +100,24 @@ class Sender(threading.Thread):
 
                     self.frame_buffer = second_half
                     additional_time += self._send()
+            else:
+                self._retry = False
 
         except Exception as e:
             print(e)
+            self._retry = True
+            additional_time += self.request_timeout
 
-        return (res.elapsed.total_seconds() + additional_time)
+        finally:
+            return additional_time
 
 
     def _update_backoff_timer(self) -> None:
+        # If we are in an error state, do not spin rapidly
+        if (self._retry):
+            self.backoff_timer = self.bmax / 2
+            return
+
         limit = self.frame_batch_size
         queued = self.queue.qsize()
 
@@ -120,22 +146,25 @@ class Sender(threading.Thread):
             self.frame_batch_size = max(self.frame_batch_size / 2, 1)
 
 
+    # TODO: Clean up the main loop for retry condition
     def run(self) -> None:
         while not self._killed:
             self._update_backoff_timer()
             print('backoff: ', self.backoff_timer)
 
+            if (not self._retry):
+                n = self._get_n(self.frame_batch_size)
 
-            n = self._get_n(self.frame_batch_size)
             remaining = self.queue.qsize()
 
             if (n > 0):
-                print('batch lim: ', self.frame_batch_size)
+                print('batch size: ', self.frame_batch_size)
 
                 elapsed = self._send()
                 self._update_batch_size(elapsed)
 
-                self.frame_buffer = []
+                if (not self._retry):
+                    self.frame_buffer = []
 
                 print('sending: ', n)
                 print('remaining: ', remaining)
