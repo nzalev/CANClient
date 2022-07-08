@@ -79,9 +79,10 @@ class Sender(threading.Thread):
             else:
                 additional_time += res.elapsed.total_seconds()
 
-
             # check for specific status codes
-            if (res.status_code != 200):
+            if (res.status_code == 200):
+                self._retry = False
+            else:
                 print('Req failed. Status: ', res.status_code)
 
                 # If Req too large, send the buffer in two halfs
@@ -100,8 +101,8 @@ class Sender(threading.Thread):
 
                     self.frame_buffer = second_half
                     additional_time += self._send()
-            else:
-                self._retry = False
+                else:
+                    self._retry = True
 
         except Exception as e:
             print(e)
