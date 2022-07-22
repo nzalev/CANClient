@@ -1,4 +1,5 @@
 import time
+import json
 import requests
 import threading
 from queue import Empty, Queue
@@ -65,12 +66,18 @@ class Sender(threading.Thread):
             return counter
 
 
+    def _generate_message(self) -> any:
+        return json.dumps(self.frame_buffer)
+
+
     def _send(self) -> float:
         additional_time = 0
 
         try:
+            message = self._generate_message()
+
             res = self.https_session.post(url=self.url,
-                                          json=self.frame_buffer,
+                                          data=message,
                                           timeout=self.request_timeout)
             
             if (not res):
